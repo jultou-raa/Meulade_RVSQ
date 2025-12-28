@@ -245,6 +245,8 @@ def run_automation_rvsq(config, search_running):
                         try:
                             # Use nuclear option to ensure field is cleared and updated
                             page.click('#PostalCode')
+                            # Ensure we click and wait briefly before typing
+                            page.wait_for_timeout(random.randint(100, 300))
                             page.keyboard.press('Control+A')
                             page.keyboard.press('Backspace')
                             page.keyboard.type(personal_info['postal_code'].upper())
@@ -259,7 +261,8 @@ def run_automation_rvsq(config, search_running):
                              # Attempt to recover or just wait
 
                         # Add random delay before clicking search to avoid detection
-                        page.wait_for_timeout(random.randint(500, 2000))
+                        # Reduced delay to be less than 10% of typical cycle (assuming cycle is few seconds)
+                        page.wait_for_timeout(random.randint(200, 500))
                         page.click('button.h-SearchButton.btn.btn-primary:has-text("Rechercher")')
 
                         try:
