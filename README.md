@@ -30,11 +30,20 @@ Face à l'incompétence flagrante du gouvernement et son système de santé dysf
 
 ### Prérequis (si exécution depuis le code source)
 
-- Python 3.7+
-- Pygame
-- Playwright
-- Support Threading
-- Winsound (Windows uniquement)
+Le moyen le plus simple d'exécuter le code source est d'utiliser [uv](https://github.com/astral-sh/uv).
+
+1. Installez `uv`.
+2. Exécutez simplement:
+   ```bash
+   uv run meulade.py
+   ```
+   `uv` installera automatiquement toutes les dépendances et Python si nécessaire.
+
+Sinon, avec pip standard:
+- Python 3.12+
+- `pip install -r requirements.txt`
+- `playwright install chromium`
+- `python meulade.py`
 
 ## English
 
@@ -58,10 +67,19 @@ Faced with the government's blatant incompetence and dysfunctional healthcare sy
 
 ### Requirements (if running from source)
 
-- Python 3.7+
-- Pygame
-- Playwright
-- Threading support
-- Winsound (Windows only)
+The easiest way to run from source is using [uv](https://github.com/astral-sh/uv).
+
+1. Install `uv`.
+2. Simply run:
+   ```bash
+   uv run meulade.py
+   ```
+   `uv` will automatically install all dependencies and Python if needed.
+
+Alternatively, using standard pip:
+- Python 3.12+
+- `pip install -r requirements.txt`
+- `playwright install chromium`
+- `python meulade.py`
 
 Envoyez moi un message si vous avez des suggestions ou des problèmes.
