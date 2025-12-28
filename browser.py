@@ -2,6 +2,7 @@ from playwright.sync_api import sync_playwright
 import random
 import os
 from datetime import datetime
+import re
 try:
     import winsound
 except ImportError:
@@ -16,6 +17,39 @@ def get_playwright_path():
             'browser_path': sys._MEIPASS  # Just use the base directory
         }
     return None
+
+def try_click_slot(page):
+    log_message("[RVSQ] Attempting to auto-click appointment...")
+    try:
+        # Priority 0: Click on the clinic link (.h-selectClinic)
+        clinic_link = page.locator('a.h-selectClinic').first
+        if clinic_link.is_visible():
+            clinic_link.click()
+            log_message("[RVSQ] Clicked clinic link")
+            # Wait for next step (time selection)
+            page.wait_for_load_state('networkidle')
+            page.wait_for_timeout(2000)
+
+        # Priority 1: Explicit "Réserver" or "Sélectionner"
+        for text in ["Réserver", "Sélectionner", "Choisir"]:
+            if page.get_by_text(text).first.is_visible():
+                page.get_by_text(text).first.click()
+                log_message(f"[RVSQ] Clicked '{text}'")
+                return True
+
+        # Priority 2: Time pattern (risky, might click clock, but RVSQ usually has time buttons)
+        # We try to find something that looks like a time button
+        # Using a regex for HH:MM
+        time_slot = page.get_by_text(re.compile(r"^\d{1,2}:\d{2}$")).first
+        if time_slot.is_visible():
+             time_slot.click()
+             log_message("[RVSQ] Clicked time slot")
+             return True
+
+        return False
+    except Exception as e:
+        log_message(f"[RVSQ] Auto-click failed: {e}")
+        return False
 
 def slot_found(page):
     log_message("🎉 SLOT FOUND! 🎉")
@@ -58,6 +92,12 @@ def slot_found(page):
     page.screenshot(path=screenshot_path, full_page=True)
     log_message(f"Screenshot saved: {screenshot_path}")
 
+    # Save full HTML content
+    html_path = os.path.join("screenshots", f"slot_found_{timestamp}.html")
+    with open(html_path, "w", encoding="utf-8") as f:
+        f.write(page.content())
+    log_message(f"HTML saved: {html_path}")
+
 
 def run_automation_rvsq(config, search_running):
     # Create screenshots directories
@@ -76,20 +116,25 @@ def run_automation_rvsq(config, search_running):
                 playwright_paths = get_playwright_path()
                 launch_args = {
                     'headless': False,
-                    'args': ['--disable-redirect-limits']
+                    'args': [
+                        '--disable-redirect-limits',
+                        '--disable-blink-features=AutomationControlled'
+                    ]
                 }
                 
                 if playwright_paths:
                     os.environ['PLAYWRIGHT_BROWSERS_PATH'] = playwright_paths['browser_path']
                 
-                browser = playwright.chromium.launch(**launch_args)
+                # Use persistent context to save cookies (Cloudflare clearance)
+                user_data_dir = os.path.join(os.getcwd(), 'browser_data', 'rvsq')
+                log_message("[RVSQ] Launching browser with persistent context...")
+                context = playwright.chromium.launch_persistent_context(user_data_dir, **launch_args)
+
+                # Remove navigator.webdriver
+                context.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
                 
-                log_message("[RVSQ] Creating new context...")
-                context = browser.new_context(
-                    user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36'
-                )
                 context.set_default_timeout(60000) # increase from 30 sec to 60 secs for general timeout
-                page = context.new_page()
+                page = context.pages[0] if context.pages else context.new_page()
 
                 log_message("[RVSQ] Navigating to form page...")
                 page.goto(
@@ -183,43 +228,81 @@ def run_automation_rvsq(config, search_running):
                 
                 
                 try:
-                    page.select_option('#perimeterCombo', '4')
+                    page.select_option('#perimeterCombo', '0')
                 except:
                     try:
                         page.click('#perimeterCombo')
-                        page.select_option('#perimeterCombo', value='4')
+                        page.select_option('#perimeterCombo', value='0')
                     except:
-                        page.evaluate('document.getElementById("perimeterCombo").value = "4"')
+                        page.evaluate('document.getElementById("perimeterCombo").value = "0"')
 
 
                 while search_running.get():  # Check if we should continue running
-                    log_message("[RVSQ] Searching for slots...")
-                    page.fill('#PostalCode', personal_info['postal_code'])
-                    page.click('button.h-SearchButton.btn.btn-primary:has-text("Rechercher")')
-                    page.wait_for_load_state('networkidle')
-                    page.wait_for_timeout(5000)
-                    
-                    no_slots_element = page.locator('#clinicsWithNoDisponibilities')
-                    no_slots_text = page.locator('text=Aucun rendez-vous rpondant')
-                    no_slots_full_text = page.locator('text=Aucun rendez-vous répondant à vos critères de recherche n\'est disponible pour le moment.')
-                    clinic_section = page.locator('text=Les cliniques suivantes offrent des disponibilités pour votre rendez-vous :')
-                    
-                    has_negative_indicators = (
-                        no_slots_text.is_visible() or 
-                        no_slots_element.is_visible() or
-                        no_slots_full_text.is_visible()
-                    )
-                    
-                    if has_negative_indicators:
-                        log_message("[RVSQ] No slots available")
-                    elif clinic_section.is_visible():
-                        slot_found(page)
-                        page.wait_for_timeout(240000) # wait 4 minutes
-                    
-                    if not search_running.get():
-                        break
+                    try:
+                        log_message("[RVSQ] Searching for slots...")
+
+                        # Aggressively fill postal code
+                        try:
+                            # Use nuclear option to ensure field is cleared and updated
+                            page.click('#PostalCode')
+                            # Ensure we click and wait briefly before typing
+                            page.wait_for_timeout(random.randint(100, 300))
+                            page.keyboard.press('Control+A')
+                            page.keyboard.press('Backspace')
+                            page.keyboard.type(personal_info['postal_code'].upper())
+                        except Exception as fill_error:
+                            log_message(f"[RVSQ] Error filling postal code: {fill_error}")
+                            # Keep going, maybe it's already filled
+
+                        # Check if "Rechercher" button exists, if not maybe we need to find "Modifier"
+                        search_btn = page.locator('button.h-SearchButton.btn.btn-primary:has-text("Rechercher")')
+                        if not search_btn.is_visible():
+                             log_message("[RVSQ] Search button not visible, checking for errors or layout change...")
+                             # Attempt to recover or just wait
+
+                        # Add random delay before clicking search to avoid detection
+                        # Reduced delay to be less than 10% of typical cycle (assuming cycle is few seconds)
+                        page.wait_for_timeout(random.randint(200, 500))
+                        page.click('button.h-SearchButton.btn.btn-primary:has-text("Rechercher")')
+
+                        try:
+                            page.wait_for_load_state('networkidle', timeout=10000)
+                        except:
+                            pass # Continue if networkidle times out
+
+                        page.wait_for_timeout(2000)
+
+                        no_slots_element = page.locator('#clinicsWithNoDisponibilities')
+                        no_slots_text = page.locator('text=Aucun rendez-vous rpondant')
+                        no_slots_full_text = page.locator('text=Aucun rendez-vous répondant à vos critères de recherche n\'est disponible pour le moment.')
+                        clinic_section = page.locator('text=Les cliniques suivantes offrent des disponibilités pour votre rendez-vous :')
                         
-                    page.wait_for_timeout(random.randint(1000, 5000))
+                        has_negative_indicators = (
+                            no_slots_text.is_visible() or
+                            no_slots_element.is_visible() or
+                            no_slots_full_text.is_visible()
+                        )
+
+                        if has_negative_indicators:
+                            log_message("[RVSQ] No slots available")
+                        elif clinic_section.is_visible():
+                            # Check if there are actually clinics listed
+                            clinics_count = page.locator('#ClinicList li').count()
+                            if clinics_count > 0:
+                                slot_found(page)
+                                try_click_slot(page)
+                                page.wait_for_timeout(240000) # wait 4 minutes
+                            else:
+                                log_message("[RVSQ] Clinic section visible but no clinics found (False Positive)")
+
+                        if not search_running.get():
+                            break
+
+                        page.wait_for_timeout(random.randint(1000, 5000))
+                    except Exception as loop_error:
+                         log_message(f"[RVSQ] Error in search loop: {str(loop_error)}")
+                         page.wait_for_timeout(5000) # Wait a bit before retrying
+                         continue
                         
                     
             except Exception as e:
@@ -230,8 +313,9 @@ def run_automation_rvsq(config, search_running):
                     error_path = os.path.join("error_screenshots", f"rvsq_error_{timestamp}.png")
                     page.screenshot(path=error_path, full_page=True)
             finally:
-                context.close()
-                browser.close()
+                if context:
+                    context.close()
+                # browser is not used with persistent context (it's part of context)
 
 def run_automation_bonjoursante(config, search_running, autobook):
     # Create screenshots directories
@@ -250,20 +334,23 @@ def run_automation_bonjoursante(config, search_running, autobook):
                 playwright_paths = get_playwright_path()
                 launch_args = {
                     'headless': False,
-                    'args': ['--disable-redirect-limits']
+                    'args': [
+                        '--disable-redirect-limits',
+                        '--disable-blink-features=AutomationControlled'
+                    ]
                 }
                 
                 if playwright_paths:
                     os.environ['PLAYWRIGHT_BROWSERS_PATH'] = playwright_paths['browser_path']
                 
-                browser = playwright.chromium.launch(**launch_args)
+                # Use persistent context
+                user_data_dir = os.path.join(os.getcwd(), 'browser_data', 'bonjoursante')
+                log_message("[BonjourSante] Launching browser with persistent context...")
+                context = playwright.chromium.launch_persistent_context(user_data_dir, **launch_args)
+                context.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
                 
-                log_message("[BonjourSante] Creating new context...")
-                context = browser.new_context(
-                    user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36'
-                )
                 context.set_default_timeout(60000) # increase from 30 sec to 60 secs for general timeout
-                page = context.new_page()
+                page = context.pages[0] if context.pages else context.new_page()
                 
                 log_message("[BonjourSante] Navigating to form page...")
                 page.goto(
@@ -386,8 +473,8 @@ def run_automation_bonjoursante(config, search_running, autobook):
                     error_path = os.path.join("error_screenshots", f"bonjour_sante_error_{timestamp}.png")
                     page.screenshot(path=error_path, full_page=True)
             finally:
-                context.close()
-                browser.close()
+                if context:
+                    context.close()
 
 
 def format_phone_number(number):
