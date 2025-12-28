@@ -258,6 +258,8 @@ def run_automation_rvsq(config, search_running):
                              log_message("[RVSQ] Search button not visible, checking for errors or layout change...")
                              # Attempt to recover or just wait
 
+                        # Add random delay before clicking search to avoid detection
+                        page.wait_for_timeout(random.randint(500, 2000))
                         page.click('button.h-SearchButton.btn.btn-primary:has-text("Rechercher")')
 
                         try:
