@@ -203,17 +203,31 @@ class AppGUI(ctk.CTk):
         
         current_row += 3
 
+        # Website Selection
+        self.website_frame = ctk.CTkFrame(self.input_frame, fg_color="transparent")
+        self.website_frame.grid(row=current_row, column=0, sticky="ew", pady=(10, 5))
+
+        self.rvsq_var = ctk.BooleanVar(value=True)
+        self.rvsq_checkbox = ctk.CTkCheckBox(self.website_frame, text="RVSQ", variable=self.rvsq_var)
+        self.rvsq_checkbox.grid(row=0, column=0, padx=10)
+
+        self.bonjour_var = ctk.BooleanVar(value=False)
+        self.bonjour_checkbox = ctk.CTkCheckBox(self.website_frame, text="Bonjour Santé", variable=self.bonjour_var)
+        self.bonjour_checkbox.grid(row=0, column=1, padx=10)
+
+        current_row += 1
+
         # Buttons
         self.button_frame = ctk.CTkFrame(self.main_frame, fg_color="transparent")
         self.button_frame.grid(row=2, column=0, pady=20)
-        
+
         self.start_button = ctk.CTkButton(self.button_frame,
                                         text=self.get_text('start'),
                                         command=self.start_search,
                                         fg_color=self.GREEN,
                                         hover_color="#15803d")
         self.start_button.grid(row=0, column=0, padx=10)
-        
+
         self.stop_button = ctk.CTkButton(self.button_frame,
                                        text=self.get_text('stop'),
                                        command=self.stop_search,
@@ -287,6 +301,10 @@ class AppGUI(ctk.CTk):
                 self.custom_reason_entry.delete(0, 'end')
                 self.custom_reason_entry.insert(0, reason_id)
 
+        # Load selected websites (Default RVSQ=True, Bonjour=False if not found)
+        self.rvsq_var.set(personal_info.get('rvsq_enabled', True))
+        self.bonjour_var.set(personal_info.get('bonjour_enabled', False))
+
     def save_config(self):
         personal_info = {}
         for key, field in self.fields.items():
@@ -300,6 +318,10 @@ class AppGUI(ctk.CTk):
              personal_info['reason_id'] = "ac2a5fa4-8514-11ef-a759-005056b11d6c"
         else:
              personal_info['reason_id'] = self.custom_reason_entry.get()
+
+        # Save website selection
+        personal_info['rvsq_enabled'] = self.rvsq_var.get()
+        personal_info['bonjour_enabled'] = self.bonjour_var.get()
 
         config = {"personal_info": personal_info}
         security.save_encrypted_config(config)
@@ -315,18 +337,24 @@ class AppGUI(ctk.CTk):
 
         config = self.save_config()
         self.search_running.set(True)
-        
+
         self.start_button.configure(state="disabled", fg_color="gray")
         self.stop_button.configure(state="normal", fg_color=self.RED)
 
-        # Start threads
-        self.search_thread_1 = threading.Thread(target=self.run_search_wrapper, args=('bonjoursante', config, self.search_running, self.autobook))
-        self.search_thread_1.daemon = True
-        self.search_thread_1.start()
+        # Start threads based on selection
+        if self.bonjour_var.get():
+            self.search_thread_1 = threading.Thread(target=self.run_search_wrapper, args=('bonjoursante', config, self.search_running, self.autobook))
+            self.search_thread_1.daemon = True
+            self.search_thread_1.start()
 
-        self.search_thread_2 = threading.Thread(target=self.run_search_wrapper, args=('rvsq', config, self.search_running, False))
-        self.search_thread_2.daemon = True
-        self.search_thread_2.start()
+        if self.rvsq_var.get():
+            self.search_thread_2 = threading.Thread(target=self.run_search_wrapper, args=('rvsq', config, self.search_running, False))
+            self.search_thread_2.daemon = True
+            self.search_thread_2.start()
+
+        if not self.rvsq_var.get() and not self.bonjour_var.get():
+            log_message("Please select at least one website")
+            self.stop_search()
 
     def stop_search(self):
         self.search_running.set(False)
