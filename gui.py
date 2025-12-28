@@ -126,7 +126,7 @@ class AppGUI(ctk.CTk):
 
             entry = ctk.CTkEntry(self.input_frame, placeholder_text=self.get_text(f'placeholder_{lang_key}'))
             entry.grid(row=current_row + 1, column=0, sticky="ew", pady=(0, 5))
-            
+
             self.fields[key] = {'entry': entry, 'label': label, 'key': lang_key}
             current_row += 2
 
@@ -363,15 +363,6 @@ class AppGUI(ctk.CTk):
         self.stop_button.configure(state="disabled", fg_color="gray")
         log_message("Stopping search...")
 
-        # Clear browser data directory
-        try:
-            browser_data_path = os.path.join(os.getcwd(), 'browser_data')
-            if os.path.exists(browser_data_path):
-                shutil.rmtree(browser_data_path)
-                log_message("Browser data cleared.")
-        except Exception as e:
-            log_message(f"Error clearing browser data: {e}")
-
     def run_search_wrapper(self, website, config, search_running, autobook):
         try:
             if website == 'rvsq':
@@ -381,6 +372,15 @@ class AppGUI(ctk.CTk):
         except Exception as e:
             log_message(f"Error in {website}: {str(e)}")
         finally:
+            # Clean up browser data after browser closes
+            try:
+                data_path = os.path.join(os.getcwd(), 'browser_data', website)
+                if os.path.exists(data_path):
+                    shutil.rmtree(data_path)
+                    log_message(f"Browser data cleared for {website}.")
+            except Exception as e:
+                log_message(f"Error clearing data for {website}: {e}")
+
             if not search_running.get():
                 # If we stopped, update UI in main thread if needed
                 pass
