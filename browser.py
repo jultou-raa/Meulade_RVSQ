@@ -228,13 +228,13 @@ def run_automation_rvsq(config, search_running):
                 
                 
                 try:
-                    page.select_option('#perimeterCombo', '4')
+                    page.select_option('#perimeterCombo', '0')
                 except:
                     try:
                         page.click('#perimeterCombo')
-                        page.select_option('#perimeterCombo', value='4')
+                        page.select_option('#perimeterCombo', value='0')
                     except:
-                        page.evaluate('document.getElementById("perimeterCombo").value = "4"')
+                        page.evaluate('document.getElementById("perimeterCombo").value = "0"')
 
 
                 while search_running.get():  # Check if we should continue running
