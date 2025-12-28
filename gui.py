@@ -5,6 +5,7 @@ from languages import translations, languages
 import browser
 import sys
 import os
+import shutil
 from logger import default_message_queue, log_message
 import security
 from PIL import Image
@@ -184,7 +185,7 @@ class AppGUI(ctk.CTk):
             # Or better, just "Consultation Urgente" and "Suivi médical" if I can guess the ID.
             # Let's try to search online for "RVSQ consultingReason values".
         }
-        
+
         # For now, I'll stick to what I have and maybe add a generic text field if "Custom" is selected?
         # Or better, just put the one we have and maybe a text field for "Custom ID" for advanced users?
         # The user on github said "mon GMF n'ajoute que des rdv en suivis réguliers".
@@ -200,7 +201,7 @@ class AppGUI(ctk.CTk):
         self.custom_reason_entry = ctk.CTkEntry(self.input_frame, placeholder_text="Enter Custom Reason ID")
         self.custom_reason_entry.grid(row=current_row + 2, column=0, sticky="ew", pady=(0, 5))
         self.custom_reason_entry.grid_remove() # Hide initially
-        
+
         current_row += 3
 
         # Website Selection
@@ -361,6 +362,15 @@ class AppGUI(ctk.CTk):
         self.start_button.configure(state="normal", fg_color=self.GREEN)
         self.stop_button.configure(state="disabled", fg_color="gray")
         log_message("Stopping search...")
+
+        # Clear browser data directory
+        try:
+            browser_data_path = os.path.join(os.getcwd(), 'browser_data')
+            if os.path.exists(browser_data_path):
+                shutil.rmtree(browser_data_path)
+                log_message("Browser data cleared.")
+        except Exception as e:
+            log_message(f"Error clearing browser data: {e}")
 
     def run_search_wrapper(self, website, config, search_running, autobook):
         try:
