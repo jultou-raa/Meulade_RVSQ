@@ -76,20 +76,25 @@ def run_automation_rvsq(config, search_running):
                 playwright_paths = get_playwright_path()
                 launch_args = {
                     'headless': False,
-                    'args': ['--disable-redirect-limits']
+                    'args': [
+                        '--disable-redirect-limits',
+                        '--disable-blink-features=AutomationControlled'
+                    ]
                 }
                 
                 if playwright_paths:
                     os.environ['PLAYWRIGHT_BROWSERS_PATH'] = playwright_paths['browser_path']
                 
-                browser = playwright.chromium.launch(**launch_args)
+                # Use persistent context to save cookies (Cloudflare clearance)
+                user_data_dir = os.path.join(os.getcwd(), 'browser_data', 'rvsq')
+                log_message("[RVSQ] Launching browser with persistent context...")
+                context = playwright.chromium.launch_persistent_context(user_data_dir, **launch_args)
+
+                # Remove navigator.webdriver
+                context.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
                 
-                log_message("[RVSQ] Creating new context...")
-                context = browser.new_context(
-                    user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36'
-                )
                 context.set_default_timeout(60000) # increase from 30 sec to 60 secs for general timeout
-                page = context.new_page()
+                page = context.pages[0] if context.pages else context.new_page()
 
                 log_message("[RVSQ] Navigating to form page...")
                 page.goto(
@@ -230,8 +235,9 @@ def run_automation_rvsq(config, search_running):
                     error_path = os.path.join("error_screenshots", f"rvsq_error_{timestamp}.png")
                     page.screenshot(path=error_path, full_page=True)
             finally:
-                context.close()
-                browser.close()
+                if context:
+                    context.close()
+                # browser is not used with persistent context (it's part of context)
 
 def run_automation_bonjoursante(config, search_running, autobook):
     # Create screenshots directories
@@ -250,20 +256,23 @@ def run_automation_bonjoursante(config, search_running, autobook):
                 playwright_paths = get_playwright_path()
                 launch_args = {
                     'headless': False,
-                    'args': ['--disable-redirect-limits']
+                    'args': [
+                        '--disable-redirect-limits',
+                        '--disable-blink-features=AutomationControlled'
+                    ]
                 }
                 
                 if playwright_paths:
                     os.environ['PLAYWRIGHT_BROWSERS_PATH'] = playwright_paths['browser_path']
                 
-                browser = playwright.chromium.launch(**launch_args)
+                # Use persistent context
+                user_data_dir = os.path.join(os.getcwd(), 'browser_data', 'bonjoursante')
+                log_message("[BonjourSante] Launching browser with persistent context...")
+                context = playwright.chromium.launch_persistent_context(user_data_dir, **launch_args)
+                context.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
                 
-                log_message("[BonjourSante] Creating new context...")
-                context = browser.new_context(
-                    user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36'
-                )
                 context.set_default_timeout(60000) # increase from 30 sec to 60 secs for general timeout
-                page = context.new_page()
+                page = context.pages[0] if context.pages else context.new_page()
                 
                 log_message("[BonjourSante] Navigating to form page...")
                 page.goto(
@@ -386,8 +395,8 @@ def run_automation_bonjoursante(config, search_running, autobook):
                     error_path = os.path.join("error_screenshots", f"bonjour_sante_error_{timestamp}.png")
                     page.screenshot(path=error_path, full_page=True)
             finally:
-                context.close()
-                browser.close()
+                if context:
+                    context.close()
 
 
 def format_phone_number(number):
