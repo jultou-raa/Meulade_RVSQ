@@ -1,546 +1,13 @@
-import pygame
+import customtkinter as ctk
 import threading
 import webbrowser
 from languages import translations, languages
 import browser
 import sys
-import json
 import os
 from logger import default_message_queue, log_message
-
-class AppGUI:
-    def __init__(self):
-        pygame.init()
-        self.width = 500  # More compact width
-        self.height = 1000  # Increased from 600 to 700 to fit everything
-        self.screen = pygame.display.set_mode((self.width, self.height))
-        pygame.display.set_caption("RVSQ Appointment Finder")
-        
-        # Colors
-        self.WHITE = (255, 255, 255)
-        self.BLACK = (20, 20, 20)
-        self.GRAY = (229, 231, 235)
-        self.BLUE = (63, 131, 248)
-        self.LIGHT_BLUE = (241, 245, 249)
-        self.RED = (239, 68, 68)
-        self.GREEN = (34, 197, 94)
-        self.HOVER_GREEN = (22, 163, 74)
-        self.HOVER_RED = (220, 38, 38)
-        self.INPUT_BG = (248, 250, 252)  # Slightly off-white for input fields
-        self.INPUT_BG_ACTIVE = (255, 255, 255)
-        self.INPUT_BORDER = (203, 213, 225)  # Tailwind slate-300
-        self.INPUT_BORDER_ACTIVE = self.BLUE
-        self.INPUT_SHADOW = (241, 245, 249)  # Tailwind slate-100
-        
-        # Fonts with better international support
-        try:
-            # For Latin characters
-            self.latin_font = pygame.font.SysFont('segoe ui', 16)
-            # For Chinese characters
-            self.chinese_font = pygame.font.SysFont('simsun', 16)
-            # For Hindi characters - try multiple Hindi fonts
-            hindi_fonts = ['nirmala ui', 'mangal', 'aparajita']
-            self.hindi_font = None
-            for font_name in hindi_fonts:
-                try:
-                    self.hindi_font = pygame.font.SysFont(font_name, 16)
-                    test_text = self.hindi_font.render('हिंदी', True, (0, 0, 0))
-                    break
-                except:
-                    continue
-            if not self.hindi_font:
-                self.hindi_font = pygame.font.SysFont('arial unicode ms', 16)
-            
-            self.title_font = self.latin_font
-            self.main_font = self.latin_font
-            self.log_font = self.latin_font
-        except:
-            default_font = pygame.font.SysFont('arial unicode ms', 16)
-            self.latin_font = default_font
-            self.chinese_font = default_font
-            self.hindi_font = default_font
-            self.title_font = default_font
-            self.main_font = default_font
-            self.log_font = default_font
-        
-
-        # Autobook appointement
-        self.autobook = True
-
-        # Initialize translations first
-        self.translations = translations
-        
-        # Language setup
-        self.languages = languages
-        self.current_language = 'Français'
-        self.language_dropdown_open = False
-        
-        # Language button - wider to accommodate all languages and moved to top-right
-        button_width = 100
-        self.language_button = pygame.Rect(self.width - button_width - 20, 15, button_width, 30)
-        
-        # Dropdown positioned to the left of the button
-        dropdown_width = 120
-        self.dropdown_rect = pygame.Rect(
-            self.language_button.x - (dropdown_width - button_width),  # Align right edge with button
-            self.language_button.bottom,
-            dropdown_width,
-            len(self.languages) * 25
-        )
-        
-        # Layout calculations - adjust spacing for logo
-        self.field_width = 400
-        self.field_height = 40
-        start_y = 250  # Position for first input field
-        spacing = 60  # Spacing between fields
-        self.center_x = (self.width - self.field_width) // 2
-        
-        # Load logo
-        try:
-            # Get the correct path whether running as script or executable
-            if getattr(sys, 'frozen', False):
-                # Running as compiled executable
-                base_path = sys._MEIPASS
-            else:
-                # Running as script
-                base_path = os.path.dirname(os.path.abspath(__file__))
-            
-            logo_path = os.path.join(base_path, 'images', 'logo_small.png')
-            self.logo = pygame.image.load(logo_path)
-            self.logo_rect = self.logo.get_rect()
-            self.logo_rect.centerx = self.width // 2
-            self.logo_rect.y = 70  # Moved down to make room for title
-        except Exception as e:
-            self.logo = None
-            print(f"Warning: Could not load logo image: {str(e)}")
-        
-        # Input fields
-        self.fields = {
-            'first_name': {
-                'text': '',
-                'rect': pygame.Rect(self.center_x, start_y, self.field_width, self.field_height),
-                'label': self.get_text('first_name'),
-                'placeholder': self.get_text('placeholder_first_name')
-            },
-            'last_name': {
-                'text': '',
-                'rect': pygame.Rect(self.center_x, start_y + spacing, self.field_width, self.field_height),
-                'label': self.get_text('last_name'),
-                'placeholder': self.get_text('placeholder_last_name')
-            },
-            'nam': {
-                'text': '',
-                'rect': pygame.Rect(self.center_x, start_y + spacing*2, self.field_width, self.field_height),
-                'label': self.get_text('nam'),
-                'placeholder': self.get_text('placeholder_nam')
-            },
-            'card_seq_number': {
-                'text': '',
-                'rect': pygame.Rect(self.center_x, start_y + spacing*3, self.field_width, self.field_height),
-                'label': self.get_text('card_seq_number'),
-                'placeholder': self.get_text('placeholder_card_seq')
-            },
-            'postal_code': {
-                'text': '',
-                'rect': pygame.Rect(self.center_x, start_y + spacing*4, self.field_width, self.field_height),
-                'label': self.get_text('postal_code'),
-                'placeholder': self.get_text('placeholder_postal_code')
-            },
-            'cellphone': {
-                'text': '',
-                'rect': pygame.Rect(self.center_x, start_y + spacing*5, self.field_width, self.field_height),
-                'label': self.get_text('cellphone'),
-                'placeholder': self.get_text('placeholder_cellphone')
-            },
-            'email': {
-                'text': '',
-                'rect': pygame.Rect(self.center_x, start_y + spacing*6, self.field_width, self.field_height),
-                'label': self.get_text('email'),
-                'placeholder': self.get_text('placeholder_email')
-            },
-            'birth_day': {
-                'text': '',
-                'rect': pygame.Rect(self.center_x, start_y + spacing*7, self.field_width//3 - 10, self.field_height),
-                'label': self.get_text('birth_day'),
-                'placeholder': self.get_text('placeholder_birth_day')
-            },
-            'birth_month': {
-                'text': '',
-                'rect': pygame.Rect(self.center_x + self.field_width//3, start_y + spacing*7, self.field_width//3 - 10, self.field_height),
-                'label': self.get_text('birth_month'),
-                'placeholder': self.get_text('placeholder_birth_month')
-            },
-            'birth_year': {
-                'text': '',
-                'rect': pygame.Rect(self.center_x + 2*(self.field_width//3), start_y + spacing*7, self.field_width//3, self.field_height),
-                'label': self.get_text('birth_year'),
-                'placeholder': self.get_text('placeholder_birth_year')
-            }
-        }
-        
-        # Buttons
-        button_width = 100
-        button_height = 35
-        button_spacing = 10
-        buttons_y = start_y + spacing*8 + 10  # Adjusted for new fields
-        
-        # Center buttons
-        total_buttons_width = (button_width * 2) + button_spacing
-        buttons_start_x = (self.width - total_buttons_width) // 2
-        
-        self.start_button = pygame.Rect(buttons_start_x, buttons_y, button_width, button_height)
-        self.stop_button = pygame.Rect(buttons_start_x + button_width + button_spacing, 
-                                     buttons_y, button_width, button_height)
-        
-        # Log area
-        log_y = buttons_y + button_height + 20
-        self.log_rect = pygame.Rect(self.center_x, log_y, self.field_width, 150)
-        
-        # Cursor blink timer
-        self.cursor_visible = True
-        self.cursor_timer = 0
-        self.CURSOR_BLINK_TIME = 530  # milliseconds
-        
-        # Status and logging with better positioning
-        self.status = "Ready to start"
-        self.log_messages = []
-        
-        self.active_field = None
-        self.running = True
-        self.search_running = SharedBoolean(False)
-        # Load saved config
-        self.load_saved_config()
-        
-        # Add URL rect for click detection
-        self.url = "www.meulade.com"
-        self.url_rect = None  # Will be set in draw method
-        
-        # Add URL color and hover color
-        self.URL_COLOR = (63, 131, 248)  # Same as self.BLUE
-        self.URL_HOVER_COLOR = (29, 78, 216)  # Darker blue for hover
-        
-
-    def load_saved_config(self):
-        try:
-            with open('config.json', 'r') as f:
-                config = json.load(f)
-                personal_info = config['personal_info']
-                for field in self.fields:
-                    self.fields[field]['text'] = personal_info.get(field, '')
-        except FileNotFoundError:
-            pass
-
-    def save_config(self):
-        config = {
-            "personal_info": {
-                field: self.fields[field]['text']
-                for field in self.fields
-            }
-        }
-        with open('config.json', 'w') as f:
-            json.dump(config, f, indent=4)
-
-    def render_text(self, text, color, font_size=16):
-        """Render text with appropriate font based on content"""
-        try:
-            if any('\u0900' <= char <= '\u097f' for char in text):  # Hindi characters
-                font = pygame.font.SysFont('nirmala ui', font_size)
-            elif any('\u4e00' <= char <= '\u9fff' for char in text):  # Chinese characters
-                font = pygame.font.SysFont('simsun', font_size)
-            else:
-                font = pygame.font.SysFont('segoe ui', font_size)
-            
-            return font.render(text, True, color)
-        except:
-            # Fallback to arial unicode ms if specific font fails
-            fallback_font = pygame.font.SysFont('arial unicode ms', font_size)
-            return fallback_font.render(text, True, color)
-
-    def draw(self):
-        # Fill background
-        self.screen.fill(self.WHITE)
-        
-        # Draw title first
-        title = self.render_text(self.get_text('app_title'), self.BLACK, 24)
-        title_rect = title.get_rect(centerx=self.width//2, y=30)  # Fixed position at top
-        self.screen.blit(title, title_rect)
-        
-        # Draw logo if available
-        if self.logo:
-            self.screen.blit(self.logo, self.logo_rect)
-        
-        # Draw input fields with enhanced styling
-        for field_name, field in self.fields.items():
-            # Draw label
-            label = self.render_text(field['label'], self.BLACK)
-            self.screen.blit(label, (field['rect'].x, field['rect'].y - 22))
-            
-            # Draw input box shadow
-            shadow_rect = field['rect'].inflate(2, 2)
-            pygame.draw.rect(self.screen, self.INPUT_SHADOW, shadow_rect, border_radius=6)
-            
-            # Draw input box background
-            if self.active_field == field_name:
-                # Active field styling
-                bg_color = self.INPUT_BG_ACTIVE
-                border_color = self.INPUT_BORDER_ACTIVE
-                # Add glow effect
-                glow_rect = field['rect'].inflate(4, 4)
-                pygame.draw.rect(self.screen, self.LIGHT_BLUE, glow_rect, border_radius=6)
-            else:
-                # Inactive field styling
-                bg_color = self.INPUT_BG
-                border_color = self.INPUT_BORDER
-            
-            # Draw main input box
-            pygame.draw.rect(self.screen, bg_color, field['rect'], border_radius=6)
-            pygame.draw.rect(self.screen, border_color, field['rect'], 2, border_radius=6)
-            
-            # Draw text or placeholder with better positioning
-            if field['text']:
-                text_surface = self.render_text(field['text'], self.BLACK)
-            else:
-                text_surface = self.render_text(field['placeholder'], self.GRAY)
-            
-            text_y = field['rect'].y + (field['rect'].height - text_surface.get_height())//2
-            self.screen.blit(text_surface, (field['rect'].x + 12, text_y))  # Slightly more padding
-            
-            # Draw cursor with better positioning
-            if self.active_field == field_name and self.cursor_visible:
-                text_width = self.render_text(field['text'], self.BLACK).get_width()
-                cursor_x = field['rect'].x + 12 + text_width
-                cursor_y = field['rect'].y + 8
-                pygame.draw.line(self.screen, self.BLACK,
-                               (cursor_x, cursor_y),
-                               (cursor_x, cursor_y + field['rect'].height - 16),
-                               2)  # Slightly thicker cursor
-        
-        # Draw buttons with updated styling
-        button_y = self.fields['birth_year']['rect'].bottom + 30
-        for button, text in [(self.start_button, self.get_text('start')), 
-                           (self.stop_button, self.get_text('stop'))]:
-            is_start = button == self.start_button
-            is_enabled = (is_start and not self.search_running.get()) or (not is_start and self.search_running.get())
-            is_hovered = button.collidepoint(pygame.mouse.get_pos())
-            
-            if is_enabled:
-                if is_start:
-                    color = self.HOVER_GREEN if is_hovered else self.GREEN
-                else:
-                    color = self.HOVER_RED if is_hovered else self.RED
-            else:
-                color = self.GRAY
-            
-            # Draw button with slight shadow
-            shadow_rect = button.inflate(2, 2)
-            pygame.draw.rect(self.screen, self.GRAY, shadow_rect, border_radius=6)
-            pygame.draw.rect(self.screen, color, button, border_radius=6)
-            
-            text_surface = self.render_text(text, self.WHITE)
-            text_rect = text_surface.get_rect(center=button.center)
-            self.screen.blit(text_surface, text_rect)
-        
-        # Add notification text under buttons with more space - split into two lines
-        notification_text1 = self.render_text(self.get_text('sound_notification_1'), self.BLACK)
-        notification_text2 = self.render_text(self.get_text('sound_notification_2'), self.BLACK)
-        notification_rect1 = notification_text1.get_rect(centerx=self.width//2, y=button_y + 50)
-        notification_rect2 = notification_text2.get_rect(centerx=self.width//2, y=button_y + 70)
-        self.screen.blit(notification_text1, notification_rect1)
-        self.screen.blit(notification_text2, notification_rect2)
-        
-        # Draw log area with more space below notification (adjusted for two lines)
-        log_y = notification_rect2.bottom + 20  # Changed from notification_rect to notification_rect2
-        self.log_rect = pygame.Rect(self.center_x, log_y, self.field_width, 80)
-        pygame.draw.rect(self.screen, self.LIGHT_BLUE, self.log_rect, border_radius=6)
-        pygame.draw.rect(self.screen, self.GRAY, self.log_rect, 1, border_radius=6)
-        
-        # Draw log messages with subtle alternating backgrounds
-        for i, message in enumerate(default_message_queue[-5:]):  # Show only last 8 messages
-            y_pos = self.log_rect.y + 5 + i*20
-            if i % 2 == 0:
-                row_rect = pygame.Rect(self.log_rect.x + 2, y_pos, self.log_rect.width - 4, 20)
-                pygame.draw.rect(self.screen, self.WHITE, row_rect)
-            log_text = self.render_text(message, self.BLACK)
-            self.screen.blit(log_text, (self.log_rect.x + 10, y_pos))
-        
-        # Draw footer with more space
-        footer_y = self.height - 40  # Give more space from bottom
-        url_text = self.render_text(self.url, self.URL_COLOR if not self.url_rect or not self.url_rect.collidepoint(pygame.mouse.get_pos()) else self.URL_HOVER_COLOR)
-        footer_suffix = self.render_text(" - " + self.get_text('footer').split(' - ')[1], self.BLACK)
-        
-        total_width = url_text.get_width() + footer_suffix.get_width()
-        start_x = (self.width - total_width) // 2
-        
-        # Draw URL with underline
-        url_y = footer_y
-        self.screen.blit(url_text, (start_x, url_y))
-        self.url_rect = pygame.Rect(start_x, url_y, url_text.get_width(), url_text.get_height())
-        
-        # Draw underline and footer text
-        if self.url_rect.collidepoint(pygame.mouse.get_pos()):
-            pygame.draw.line(self.screen, self.URL_HOVER_COLOR,
-                           (self.url_rect.left, self.url_rect.bottom),
-                           (self.url_rect.right, self.url_rect.bottom),
-                           2)
-        else:
-            pygame.draw.line(self.screen, self.URL_COLOR,
-                           (self.url_rect.left, self.url_rect.bottom),
-                           (self.url_rect.right, self.url_rect.bottom),
-                           1)
-        
-        self.screen.blit(footer_suffix, (start_x + url_text.get_width(), url_y))
-        
-        # Draw language selector and dropdown LAST to appear on top
-        # Language button
-        pygame.draw.rect(self.screen, self.BLUE, self.language_button, border_radius=6)
-        lang_text = self.render_text(self.current_language, self.WHITE)
-        text_rect = lang_text.get_rect()
-        text_x = self.language_button.centerx - text_rect.width // 2
-        text_y = self.language_button.centery - text_rect.height // 2
-        self.screen.blit(lang_text, (text_x, text_y))
-        
-        # Draw dropdown if open (on top of everything)
-        if self.language_dropdown_open:
-            # Add semi-transparent overlay behind dropdown
-            overlay = pygame.Surface((self.width, self.height))
-            overlay.fill(self.WHITE)
-            overlay.set_alpha(128)
-            self.screen.blit(overlay, (0, 0))
-            
-            # Draw dropdown background with shadow
-            shadow_rect = self.dropdown_rect.inflate(4, 4)
-            pygame.draw.rect(self.screen, (0, 0, 0, 30), shadow_rect, border_radius=6)  # Shadow
-            pygame.draw.rect(self.screen, self.WHITE, self.dropdown_rect, border_radius=6)  # Background
-            pygame.draw.rect(self.screen, self.GRAY, self.dropdown_rect, 1, border_radius=6)  # Border
-            
-            # Draw language options
-            for i, lang in enumerate(self.languages):
-                option_rect = pygame.Rect(
-                    self.dropdown_rect.x,
-                    self.dropdown_rect.y + i * 25,
-                    self.dropdown_rect.width,
-                    25
-                )
-                
-                # Draw option background
-                if option_rect.collidepoint(pygame.mouse.get_pos()):
-                    pygame.draw.rect(self.screen, self.LIGHT_BLUE, option_rect, border_radius=3)
-                elif lang == self.current_language:
-                    pygame.draw.rect(self.screen, (245, 247, 250), option_rect, border_radius=3)
-                
-                # Draw language text
-                lang_text = self.render_text(lang, self.BLACK)
-                text_y = option_rect.y + (option_rect.height - lang_text.get_height()) // 2
-                self.screen.blit(lang_text, (option_rect.x + 8, text_y))
-        
-        pygame.display.flip()
-
-    def handle_event(self, event):
-        if event.type == pygame.MOUSEBUTTONDOWN:
-            # Handle URL click
-            if self.url_rect and self.url_rect.collidepoint(event.pos):
-                webbrowser.open(f"https://{self.url}")
-            
-            # Handle language selector
-            if self.language_button.collidepoint(event.pos):
-                self.language_dropdown_open = not self.language_dropdown_open
-            elif self.language_dropdown_open:
-                # Calculate rectangles for each language option
-                for i, lang in enumerate(self.languages):
-                    lang_rect = pygame.Rect(
-                        self.dropdown_rect.x,
-                        self.dropdown_rect.y + i * 25,  # 25 pixels height per option
-                        self.dropdown_rect.width,
-                        25
-                    )
-                    if lang_rect.collidepoint(event.pos):
-                        self.current_language = lang
-                        self.language_dropdown_open = False
-                        self.update_language()  # Update all text when language changes
-                        break
-                else:
-                    # Click outside dropdown closes it
-                    self.language_dropdown_open = False
-            
-            # Handle input field selection
-            for field_name, field in self.fields.items():
-                if field['rect'].collidepoint(event.pos):
-                    self.active_field = field_name
-                    break
-            else:
-                self.active_field = None
-            
-            # Handle button clicks
-            if self.start_button.collidepoint(event.pos) and not self.search_running.get():
-                self.start_search()
-            elif self.stop_button.collidepoint(event.pos) and self.search_running.get():
-                self.stop_search()
-        
-        elif event.type == pygame.KEYDOWN:
-            if self.active_field:
-                if event.key == pygame.K_BACKSPACE:
-                    self.fields[self.active_field]['text'] = self.fields[self.active_field]['text'][:-1]
-                else:
-                    self.fields[self.active_field]['text'] += event.unicode
-
-    def start_search(self):
-        if not all(self.fields[field]['text'] for field in self.fields):
-            self.status = "Error: Please fill in all fields"
-            return
-        
-        self.save_config()
-        self.search_running.set(True)
-        self.status = "Running..."
-        
-        # Start the search in a separate thread
-        self.search_thread_1 = threading.Thread(target=self.run_search, args=('bonjoursante', self.search_running, self.autobook))
-        self.search_thread_1.daemon = True
-        self.search_thread_1.start()
-        self.search_thread_2 = threading.Thread(target=self.run_search, args=('rvsq', self.search_running, False))
-        self.search_thread_2.daemon = True
-        self.search_thread_2.start()
-    def stop_search(self):
-        self.search_running.set(False)
-        self.status = "Stopping..."
-
-    def run_search(self,website, search_running, autobook):
-        config = {
-            "personal_info": {
-                field: self.fields[field]['text']
-                for field in self.fields
-            }
-        }
-        
-        while search_running.get():
-            try:
-                if(website == 'rvsq'):
-                    browser.run_automation_rvsq(config, search_running)
-                elif ( website == 'bonjoursante'):
-                    browser.run_automation_bonjoursante(config, search_running, autobook)
-            except Exception as e:
-                log_message(f"Error: {str(e)}")
-            finally:
-                # self.search_running = False
-                self.status = "Ready to start"
-
-    def update(self):
-        # Update cursor blink
-        current_time = pygame.time.get_ticks()
-        if current_time - self.cursor_timer > self.CURSOR_BLINK_TIME:
-            self.cursor_visible = not self.cursor_visible
-            self.cursor_timer = current_time
-
-    def update_language(self):
-        """Update all text elements when language changes"""
-        for field_name in self.fields:
-            self.fields[field_name]['label'] = self.get_text(field_name)
-            self.fields[field_name]['placeholder'] = self.get_text(f'placeholder_{field_name}')
-        self.status = self.get_text('ready')
-
-
-    def get_text(self, key):
-        """Get translated text for current language"""
-        return translations.get(self.current_language, translations['English']).get(key, key)
+import security
+from PIL import Image
 
 class SharedBoolean:
     def __init__(self, initial_value):
@@ -554,4 +21,352 @@ class SharedBoolean:
     def get(self):
         with self.lock:
             return self.value
+
+class AppGUI(ctk.CTk):
+    def __init__(self):
+        super().__init__()
         
+        self.title("RVSQ Appointment Finder")
+        self.geometry("500x850")
+        
+        # Set theme
+        ctk.set_appearance_mode("System")
+        ctk.set_default_color_theme("blue")
+        
+        # Constants
+        self.BLUE = "#3f83f8"
+        self.GREEN = "#22c55e"
+        self.RED = "#ef4444"
+        
+        # Initialize translations and languages
+        self.translations = translations
+        self.languages = languages
+        self.current_language = 'Français'
+        
+        # State
+        self.search_running = SharedBoolean(False)
+        self.autobook = True
+        
+        # Load logo
+        self.logo = None
+        try:
+            if getattr(sys, 'frozen', False):
+                base_path = sys._MEIPASS
+            else:
+                base_path = os.path.dirname(os.path.abspath(__file__))
+            
+            logo_path = os.path.join(base_path, 'images', 'logo_small.png')
+            if os.path.exists(logo_path):
+                 self.logo = ctk.CTkImage(light_image=Image.open(logo_path),
+                                          dark_image=Image.open(logo_path),
+                                          size=(100, 100))
+        except Exception as e:
+            print(f"Warning: Could not load logo image: {str(e)}")
+
+        self.setup_ui()
+        self.load_saved_config()
+        
+        # Start status update loop
+        self.update_status()
+
+    def setup_ui(self):
+        # Configure grid layout
+        self.grid_columnconfigure(0, weight=1)
+        self.grid_rowconfigure(0, weight=1)
+
+        # Main scrollable frame
+        self.main_frame = ctk.CTkScrollableFrame(self)
+        self.main_frame.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
+        self.main_frame.grid_columnconfigure(0, weight=1)
+
+        # Header Frame (Logo + Title)
+        self.header_frame = ctk.CTkFrame(self.main_frame, fg_color="transparent")
+        self.header_frame.grid(row=0, column=0, pady=(10, 20), sticky="ew")
+        self.header_frame.grid_columnconfigure(0, weight=1)
+
+        if self.logo:
+            self.logo_label = ctk.CTkLabel(self.header_frame, image=self.logo, text="")
+            self.logo_label.grid(row=0, column=0, pady=(0, 10))
+
+        self.title_label = ctk.CTkLabel(self.header_frame,
+                                      text=self.get_text('app_title'),
+                                      font=ctk.CTkFont(size=20, weight="bold"))
+        self.title_label.grid(row=1, column=0)
+        
+        # Language Selector (Top Right)
+        self.language_var = ctk.StringVar(value=self.current_language)
+        self.language_menu = ctk.CTkOptionMenu(self.header_frame,
+                                             values=self.languages,
+                                             command=self.change_language,
+                                             variable=self.language_var,
+                                             width=100)
+        self.language_menu.place(relx=1.0, rely=0.0, anchor="ne")
+
+        # Input Fields Frame
+        self.input_frame = ctk.CTkFrame(self.main_frame, fg_color="transparent")
+        self.input_frame.grid(row=1, column=0, sticky="ew", padx=20)
+        self.input_frame.grid_columnconfigure(0, weight=1)
+
+        self.fields = {}
+        field_configs = [
+            ('first_name', 'first_name'),
+            ('last_name', 'last_name'),
+            ('nam', 'nam'),
+            ('card_seq_number', 'card_seq_number'),
+            ('postal_code', 'postal_code'),
+            ('cellphone', 'cellphone'),
+            ('email', 'email')
+        ]
+
+        current_row = 0
+        for key, lang_key in field_configs:
+            label = ctk.CTkLabel(self.input_frame, text=self.get_text(lang_key), anchor="w")
+            label.grid(row=current_row, column=0, sticky="w", pady=(5, 0))
+
+            entry = ctk.CTkEntry(self.input_frame, placeholder_text=self.get_text(f'placeholder_{lang_key}'))
+            entry.grid(row=current_row + 1, column=0, sticky="ew", pady=(0, 5))
+            
+            self.fields[key] = {'entry': entry, 'label': label, 'key': lang_key}
+            current_row += 2
+
+        # Birth Date Fields
+        self.birth_label = ctk.CTkLabel(self.input_frame, text="Birth Date", anchor="w") # Label will be updated
+        self.birth_label.grid(row=current_row, column=0, sticky="w", pady=(5, 0))
+        
+        self.birth_frame = ctk.CTkFrame(self.input_frame, fg_color="transparent")
+        self.birth_frame.grid(row=current_row + 1, column=0, sticky="ew", pady=(0, 5))
+        self.birth_frame.grid_columnconfigure((0, 1, 2), weight=1)
+
+        self.fields['birth_day'] = {'entry': ctk.CTkEntry(self.birth_frame, placeholder_text="DD"), 'key': 'birth_day'}
+        self.fields['birth_day']['entry'].grid(row=0, column=0, padx=(0, 5), sticky="ew")
+
+        self.fields['birth_month'] = {'entry': ctk.CTkEntry(self.birth_frame, placeholder_text="MM"), 'key': 'birth_month'} # Usually a select in HTML, but keeping text for now or maybe switch to OptionMenu
+        # Actually RVSQ uses a dropdown for month usually (01, 02...). Let's stick to text for simplicity but maybe OptionMenu is better?
+        # The original code had text input for day and year, and select for month.
+        # Let's use OptionMenu for month.
+        months = [str(i).zfill(2) for i in range(1, 13)]
+        self.fields['birth_month']['entry'] = ctk.CTkOptionMenu(self.birth_frame, values=months)
+        self.fields['birth_month']['entry'].grid(row=0, column=1, padx=5, sticky="ew")
+        
+        self.fields['birth_year'] = {'entry': ctk.CTkEntry(self.birth_frame, placeholder_text="YYYY"), 'key': 'birth_year'}
+        self.fields['birth_year']['entry'].grid(row=0, column=2, padx=(5, 0), sticky="ew")
+        
+        current_row += 2
+
+        # Consulting Reason
+        self.reason_label = ctk.CTkLabel(self.input_frame, text="Raison de consultation", anchor="w")
+        self.reason_label.grid(row=current_row, column=0, sticky="w", pady=(5, 0))
+        
+        # Options from RVSQ
+        # We need the values for the select option.
+        # Based on typical RVSQ values. The user mentioned one: 'ac2a5fa4-8514-11ef-a759-005056b11d6c' (Consultation Urgente)
+        # I should probably provide a map.
+        self.reason_options = {
+            "Consultation Urgente": "ac2a5fa4-8514-11ef-a759-005056b11d6c",
+            "Suivi régulier": "suivi_regulier_value_placeholder", # I don't have this value yet, need to find it or let user input it?
+            # Actually, without the values, it's hard. But the user said: "mon GMF n'ajoute que des rdv en suivis réguliers".
+            # Maybe I should just provide a way to select "Consultation Urgente" or "Suivi de routine" if I can find the ID.
+            # If I can't find the ID, I might need to look it up dynamically or ask the user to provide it?
+            # Or maybe just "Urgence Mineure" vs "Suivi".
+            # Let's assume for now I only have the one from the code.
+            # Wait, if I don't have the value, I can't select it.
+            # However, `browser.py` hardcodes it.
+            # Maybe I should list common reasons if I can find them.
+            # If not, I will just put the one I know and maybe "Other" (and try to handle it dynamically? No that's hard).
+            # The issue says "Il faudrait laisser au user le choix du consultingReason".
+            # The user might know the value or maybe I can scrape it?
+            # But I can't scrape it easily without login or being on the page.
+            # Let's look at `browser.py` again. It selects by value.
+            # `page.select_option('#consultingReason', 'ac2a5fa4-8514-11ef-a759-005056b11d6c')`
+            
+            # I will add a few common ones if I can find them on google.
+            # Otherwise, I'll add "Consultation Urgente" and maybe a text entry for "Other (Value)"?
+            # Or better, just "Consultation Urgente" and "Suivi médical" if I can guess the ID.
+            # Let's try to search online for "RVSQ consultingReason values".
+        }
+        
+        # For now, I'll stick to what I have and maybe add a generic text field if "Custom" is selected?
+        # Or better, just put the one we have and maybe a text field for "Custom ID" for advanced users?
+        # The user on github said "mon GMF n'ajoute que des rdv en suivis réguliers".
+        # So they probably know what they want.
+        
+        self.reason_var = ctk.StringVar(value="Consultation Urgente")
+        self.reason_menu = ctk.CTkOptionMenu(self.input_frame,
+                                             values=["Consultation Urgente", "Custom ID"],
+                                             command=self.on_reason_change,
+                                             variable=self.reason_var)
+        self.reason_menu.grid(row=current_row + 1, column=0, sticky="ew", pady=(0, 5))
+        
+        self.custom_reason_entry = ctk.CTkEntry(self.input_frame, placeholder_text="Enter Custom Reason ID")
+        self.custom_reason_entry.grid(row=current_row + 2, column=0, sticky="ew", pady=(0, 5))
+        self.custom_reason_entry.grid_remove() # Hide initially
+        
+        current_row += 3
+
+        # Buttons
+        self.button_frame = ctk.CTkFrame(self.main_frame, fg_color="transparent")
+        self.button_frame.grid(row=2, column=0, pady=20)
+        
+        self.start_button = ctk.CTkButton(self.button_frame,
+                                        text=self.get_text('start'),
+                                        command=self.start_search,
+                                        fg_color=self.GREEN,
+                                        hover_color="#15803d")
+        self.start_button.grid(row=0, column=0, padx=10)
+        
+        self.stop_button = ctk.CTkButton(self.button_frame,
+                                       text=self.get_text('stop'),
+                                       command=self.stop_search,
+                                       fg_color=self.RED,
+                                       hover_color="#b91c1c",
+                                       state="disabled")
+        self.stop_button.grid(row=0, column=1, padx=10)
+
+        # Log Area
+        self.log_textbox = ctk.CTkTextbox(self.main_frame, height=150)
+        self.log_textbox.grid(row=3, column=0, sticky="ew", padx=20, pady=10)
+        self.log_textbox.configure(state="disabled")
+
+        # Footer
+        self.footer_label = ctk.CTkLabel(self.main_frame,
+                                       text="www.meulade.com - " + self.get_text('footer').split(' - ')[-1],
+                                       text_color=self.BLUE,
+                                       cursor="hand2")
+        self.footer_label.grid(row=4, column=0, pady=20)
+        self.footer_label.bind("<Button-1>", lambda e: webbrowser.open("https://www.meulade.com"))
+
+    def on_reason_change(self, choice):
+        if choice == "Custom ID":
+            self.custom_reason_entry.grid()
+        else:
+            self.custom_reason_entry.grid_remove()
+
+    def get_text(self, key):
+        return self.translations.get(self.current_language, self.translations['English']).get(key, key)
+
+    def change_language(self, new_lang):
+        self.current_language = new_lang
+        self.update_ui_text()
+
+    def update_ui_text(self):
+        self.title_label.configure(text=self.get_text('app_title'))
+        
+        for key, field in self.fields.items():
+            if 'label' in field:
+                field['label'].configure(text=self.get_text(field['key']))
+            if isinstance(field['entry'], ctk.CTkEntry):
+                field['entry'].configure(placeholder_text=self.get_text(f"placeholder_{field['key']}"))
+        
+        self.start_button.configure(text=self.get_text('start'))
+        self.stop_button.configure(text=self.get_text('stop'))
+        self.footer_label.configure(text="www.meulade.com - " + self.get_text('footer').split(' - ')[-1])
+        # Update birth date labels if I added them to translations
+        
+    def load_saved_config(self):
+        config = security.load_encrypted_config()
+        if not config:
+            return
+            
+        personal_info = config.get('personal_info', {})
+        for key, field in self.fields.items():
+            if key in personal_info:
+                if isinstance(field['entry'], ctk.CTkEntry):
+                    field['entry'].delete(0, 'end')
+                    field['entry'].insert(0, personal_info[key])
+                elif isinstance(field['entry'], ctk.CTkOptionMenu):
+                     field['entry'].set(personal_info[key])
+        
+        # Load reason
+        if 'reason_id' in personal_info:
+            reason_id = personal_info['reason_id']
+            if reason_id == "ac2a5fa4-8514-11ef-a759-005056b11d6c":
+                self.reason_var.set("Consultation Urgente")
+            else:
+                self.reason_var.set("Custom ID")
+                self.custom_reason_entry.grid()
+                self.custom_reason_entry.delete(0, 'end')
+                self.custom_reason_entry.insert(0, reason_id)
+
+    def save_config(self):
+        personal_info = {}
+        for key, field in self.fields.items():
+             if isinstance(field['entry'], ctk.CTkEntry):
+                personal_info[key] = field['entry'].get()
+             elif isinstance(field['entry'], ctk.CTkOptionMenu):
+                personal_info[key] = field['entry'].get()
+        
+        # Save reason
+        if self.reason_var.get() == "Consultation Urgente":
+             personal_info['reason_id'] = "ac2a5fa4-8514-11ef-a759-005056b11d6c"
+        else:
+             personal_info['reason_id'] = self.custom_reason_entry.get()
+
+        config = {"personal_info": personal_info}
+        security.save_encrypted_config(config)
+        return config
+
+    def start_search(self):
+        # Basic Validation
+        for key, field in self.fields.items():
+            val = field['entry'].get()
+            if not val:
+                log_message(f"Error: {key} is required")
+                return
+
+        config = self.save_config()
+        self.search_running.set(True)
+        
+        self.start_button.configure(state="disabled", fg_color="gray")
+        self.stop_button.configure(state="normal", fg_color=self.RED)
+
+        # Start threads
+        self.search_thread_1 = threading.Thread(target=self.run_search_wrapper, args=('bonjoursante', config, self.search_running, self.autobook))
+        self.search_thread_1.daemon = True
+        self.search_thread_1.start()
+
+        self.search_thread_2 = threading.Thread(target=self.run_search_wrapper, args=('rvsq', config, self.search_running, False))
+        self.search_thread_2.daemon = True
+        self.search_thread_2.start()
+
+    def stop_search(self):
+        self.search_running.set(False)
+        self.start_button.configure(state="normal", fg_color=self.GREEN)
+        self.stop_button.configure(state="disabled", fg_color="gray")
+        log_message("Stopping search...")
+
+    def run_search_wrapper(self, website, config, search_running, autobook):
+        try:
+            if website == 'rvsq':
+                browser.run_automation_rvsq(config, search_running)
+            elif website == 'bonjoursante':
+                browser.run_automation_bonjoursante(config, search_running, autobook)
+        except Exception as e:
+            log_message(f"Error in {website}: {str(e)}")
+        finally:
+            if not search_running.get():
+                # If we stopped, update UI in main thread if needed
+                pass
+
+    def update_status(self):
+        # Update log
+        self.log_textbox.configure(state="normal")
+        current_text = self.log_textbox.get("1.0", "end")
+
+        # Check if there are new messages
+        # efficient way?
+        # Just clear and rewrite for now or append new ones
+        self.log_textbox.delete("1.0", "end")
+        for msg in default_message_queue[-10:]:
+            self.log_textbox.insert("end", msg + "\n")
+
+        self.log_textbox.see("end")
+        self.log_textbox.configure(state="disabled")
+
+        # Check running state to update buttons if stopped from thread
+        if not self.search_running.get() and self.stop_button._state == "normal":
+             self.stop_search()
+
+        self.after(500, self.update_status)
+
+    def run(self):
+        self.mainloop()

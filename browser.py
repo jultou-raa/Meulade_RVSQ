@@ -2,7 +2,10 @@ from playwright.sync_api import sync_playwright
 import random
 import os
 from datetime import datetime
-import winsound
+try:
+    import winsound
+except ImportError:
+    winsound = None
 import sys
 from logger import log_message
 
@@ -17,14 +20,41 @@ def get_playwright_path():
 def slot_found(page):
     log_message("🎉 SLOT FOUND! 🎉")
     print("🎉 SLOT FOUND! 🎉")
-    winsound.Beep(1000, 500)
-    winsound.Beep(2000, 500)
-    winsound.Beep(1000, 500)
-    winsound.Beep(2000, 500)
-    winsound.Beep(1000, 500)
-    winsound.Beep(2000, 500)
+    if winsound:
+        winsound.Beep(1000, 500)
+        winsound.Beep(2000, 500)
+        winsound.Beep(1000, 500)
+        winsound.Beep(2000, 500)
+        winsound.Beep(1000, 500)
+        winsound.Beep(2000, 500)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     screenshot_path = os.path.join("screenshots", f"slot_found_{timestamp}.png")
+
+    # Mask sensitive info before screenshot
+    page.evaluate("""
+        const selectors = [
+            '#ctl00_ContentPlaceHolderMP_AssureForm_FirstName',
+            '#ctl00_ContentPlaceHolderMP_AssureForm_LastName',
+            '#ctl00_ContentPlaceHolderMP_AssureForm_NAM',
+            '#ctl00_ContentPlaceHolderMP_AssureForm_CardSeqNumber',
+            '#patient-nam-input',
+            '#postal-code-search-input',
+            'input#healthInsuranceNumber',
+            'input#healthInsuranceNumberSequence',
+            'input#firstName',
+            'input#lastName',
+            'input#cellPhone',
+            'input#email'
+        ];
+        selectors.forEach(sel => {
+            const els = document.querySelectorAll(sel);
+            els.forEach(el => {
+                el.style.filter = 'blur(5px)';
+                el.style.color = 'transparent';
+            });
+        });
+    """)
+
     page.screenshot(path=screenshot_path, full_page=True)
     log_message(f"Screenshot saved: {screenshot_path}")
 
@@ -120,9 +150,10 @@ def run_automation_rvsq(config, search_running):
                 page.wait_for_selector('#consultingReason', state='visible', timeout=60000)
                 page.wait_for_timeout(2000)
                 
-                log_message("[RVSQ] Selecting 'Consultation Urgente'...")
+                log_message("[RVSQ] Selecting Consultation Reason...")
+                reason_id = personal_info.get('reason_id', 'ac2a5fa4-8514-11ef-a759-005056b11d6c')
                 page.click('#consultingReason')
-                page.select_option('#consultingReason', 'ac2a5fa4-8514-11ef-a759-005056b11d6c')
+                page.select_option('#consultingReason', reason_id)
                 
                 if not has_family_doctor:
                     log_message("[RVSQ] Setting 50km radius...")
@@ -295,6 +326,22 @@ def run_automation_bonjoursante(config, search_running, autobook):
                             search_running.set(False)
                             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                             screenshot_path = os.path.join("screenshots", f"slot_confirmed_{timestamp}.png")
+
+                            # Mask sensitive info before screenshot
+                            page.evaluate("""
+                                const selectors = [
+                                    'input',
+                                    'select',
+                                    '.sensitive'
+                                ];
+                                selectors.forEach(sel => {
+                                    const els = document.querySelectorAll(sel);
+                                    els.forEach(el => {
+                                        el.style.filter = 'blur(5px)';
+                                    });
+                                });
+                            """)
+
                             page.screenshot(path=screenshot_path, full_page=True)
                             log_message(f"Screenshot saved: {screenshot_path}")
                             # context.set_default_timeout(240000) # wait for 4 imnutes
