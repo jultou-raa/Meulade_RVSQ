@@ -2,6 +2,7 @@ from playwright.sync_api import sync_playwright
 import random
 import os
 from datetime import datetime
+import re
 try:
     import winsound
 except ImportError:
@@ -16,6 +17,30 @@ def get_playwright_path():
             'browser_path': sys._MEIPASS  # Just use the base directory
         }
     return None
+
+def try_click_slot(page):
+    log_message("[RVSQ] Attempting to auto-click appointment...")
+    try:
+        # Priority 1: Explicit "Réserver" or "Sélectionner"
+        for text in ["Réserver", "Sélectionner", "Choisir"]:
+            if page.get_by_text(text).first.is_visible():
+                page.get_by_text(text).first.click()
+                log_message(f"[RVSQ] Clicked '{text}'")
+                return True
+
+        # Priority 2: Time pattern (risky, might click clock, but RVSQ usually has time buttons)
+        # We try to find something that looks like a time button
+        # Using a regex for HH:MM
+        time_slot = page.get_by_text(re.compile(r"^\d{1,2}:\d{2}$")).first
+        if time_slot.is_visible():
+             time_slot.click()
+             log_message("[RVSQ] Clicked time slot")
+             return True
+
+        return False
+    except Exception as e:
+        log_message(f"[RVSQ] Auto-click failed: {e}")
+        return False
 
 def slot_found(page):
     log_message("🎉 SLOT FOUND! 🎉")
@@ -248,6 +273,7 @@ def run_automation_rvsq(config, search_running):
                             log_message("[RVSQ] No slots available")
                         elif clinic_section.is_visible():
                             slot_found(page)
+                            try_click_slot(page)
                             page.wait_for_timeout(240000) # wait 4 minutes
 
                         if not search_running.get():
