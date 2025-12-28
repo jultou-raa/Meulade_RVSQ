@@ -281,9 +281,14 @@ def run_automation_rvsq(config, search_running):
                         if has_negative_indicators:
                             log_message("[RVSQ] No slots available")
                         elif clinic_section.is_visible():
-                            slot_found(page)
-                            try_click_slot(page)
-                            page.wait_for_timeout(240000) # wait 4 minutes
+                            # Check if there are actually clinics listed
+                            clinics_count = page.locator('#ClinicList li').count()
+                            if clinics_count > 0:
+                                slot_found(page)
+                                try_click_slot(page)
+                                page.wait_for_timeout(240000) # wait 4 minutes
+                            else:
+                                log_message("[RVSQ] Clinic section visible but no clinics found (False Positive)")
 
                         if not search_running.get():
                             break
