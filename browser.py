@@ -198,33 +198,57 @@ def run_automation_rvsq(config, search_running):
 
 
                 while search_running.get():  # Check if we should continue running
-                    log_message("[RVSQ] Searching for slots...")
-                    page.fill('#PostalCode', personal_info['postal_code'])
-                    page.click('button.h-SearchButton.btn.btn-primary:has-text("Rechercher")')
-                    page.wait_for_load_state('networkidle')
-                    page.wait_for_timeout(5000)
-                    
-                    no_slots_element = page.locator('#clinicsWithNoDisponibilities')
-                    no_slots_text = page.locator('text=Aucun rendez-vous rpondant')
-                    no_slots_full_text = page.locator('text=Aucun rendez-vous répondant à vos critères de recherche n\'est disponible pour le moment.')
-                    clinic_section = page.locator('text=Les cliniques suivantes offrent des disponibilités pour votre rendez-vous :')
-                    
-                    has_negative_indicators = (
-                        no_slots_text.is_visible() or 
-                        no_slots_element.is_visible() or
-                        no_slots_full_text.is_visible()
-                    )
-                    
-                    if has_negative_indicators:
-                        log_message("[RVSQ] No slots available")
-                    elif clinic_section.is_visible():
-                        slot_found(page)
-                        page.wait_for_timeout(240000) # wait 4 minutes
-                    
-                    if not search_running.get():
-                        break
+                    try:
+                        log_message("[RVSQ] Searching for slots...")
+
+                        # Aggressively fill postal code
+                        try:
+                            page.click('#PostalCode')
+                            page.fill('#PostalCode', personal_info['postal_code'])
+                        except Exception as fill_error:
+                            log_message(f"[RVSQ] Error filling postal code: {fill_error}")
+                            # Keep going, maybe it's already filled
+
+                        # Check if "Rechercher" button exists, if not maybe we need to find "Modifier"
+                        search_btn = page.locator('button.h-SearchButton.btn.btn-primary:has-text("Rechercher")')
+                        if not search_btn.is_visible():
+                             log_message("[RVSQ] Search button not visible, checking for errors or layout change...")
+                             # Attempt to recover or just wait
+
+                        page.click('button.h-SearchButton.btn.btn-primary:has-text("Rechercher")')
+
+                        try:
+                            page.wait_for_load_state('networkidle', timeout=10000)
+                        except:
+                            pass # Continue if networkidle times out
+
+                        page.wait_for_timeout(2000)
+
+                        no_slots_element = page.locator('#clinicsWithNoDisponibilities')
+                        no_slots_text = page.locator('text=Aucun rendez-vous rpondant')
+                        no_slots_full_text = page.locator('text=Aucun rendez-vous répondant à vos critères de recherche n\'est disponible pour le moment.')
+                        clinic_section = page.locator('text=Les cliniques suivantes offrent des disponibilités pour votre rendez-vous :')
                         
-                    page.wait_for_timeout(random.randint(1000, 5000))
+                        has_negative_indicators = (
+                            no_slots_text.is_visible() or
+                            no_slots_element.is_visible() or
+                            no_slots_full_text.is_visible()
+                        )
+
+                        if has_negative_indicators:
+                            log_message("[RVSQ] No slots available")
+                        elif clinic_section.is_visible():
+                            slot_found(page)
+                            page.wait_for_timeout(240000) # wait 4 minutes
+
+                        if not search_running.get():
+                            break
+
+                        page.wait_for_timeout(random.randint(1000, 5000))
+                    except Exception as loop_error:
+                         log_message(f"[RVSQ] Error in search loop: {str(loop_error)}")
+                         page.wait_for_timeout(5000) # Wait a bit before retrying
+                         continue
                         
                     
             except Exception as e:
