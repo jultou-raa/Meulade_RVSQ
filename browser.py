@@ -58,6 +58,12 @@ def slot_found(page):
     page.screenshot(path=screenshot_path, full_page=True)
     log_message(f"Screenshot saved: {screenshot_path}")
 
+    # Save full HTML content
+    html_path = os.path.join("screenshots", f"slot_found_{timestamp}.html")
+    with open(html_path, "w", encoding="utf-8") as f:
+        f.write(page.content())
+    log_message(f"HTML saved: {html_path}")
+
 
 def run_automation_rvsq(config, search_running):
     # Create screenshots directories
