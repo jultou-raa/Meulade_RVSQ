@@ -209,8 +209,11 @@ def run_automation_rvsq(config, search_running):
 
                         # Aggressively fill postal code
                         try:
+                            # Use nuclear option to ensure field is cleared and updated
                             page.click('#PostalCode')
-                            page.fill('#PostalCode', personal_info['postal_code'])
+                            page.keyboard.press('Control+A')
+                            page.keyboard.press('Backspace')
+                            page.keyboard.type(personal_info['postal_code'])
                         except Exception as fill_error:
                             log_message(f"[RVSQ] Error filling postal code: {fill_error}")
                             # Keep going, maybe it's already filled
