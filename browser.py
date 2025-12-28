@@ -213,7 +213,7 @@ def run_automation_rvsq(config, search_running):
                             page.click('#PostalCode')
                             page.keyboard.press('Control+A')
                             page.keyboard.press('Backspace')
-                            page.keyboard.type(personal_info['postal_code'])
+                            page.keyboard.type(personal_info['postal_code'].upper())
                         except Exception as fill_error:
                             log_message(f"[RVSQ] Error filling postal code: {fill_error}")
                             # Keep going, maybe it's already filled
