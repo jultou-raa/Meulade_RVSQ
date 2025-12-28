@@ -21,6 +21,15 @@ def get_playwright_path():
 def try_click_slot(page):
     log_message("[RVSQ] Attempting to auto-click appointment...")
     try:
+        # Priority 0: Click on the clinic link (.h-selectClinic)
+        clinic_link = page.locator('a.h-selectClinic').first
+        if clinic_link.is_visible():
+            clinic_link.click()
+            log_message("[RVSQ] Clicked clinic link")
+            # Wait for next step (time selection)
+            page.wait_for_load_state('networkidle')
+            page.wait_for_timeout(2000)
+
         # Priority 1: Explicit "Réserver" or "Sélectionner"
         for text in ["Réserver", "Sélectionner", "Choisir"]:
             if page.get_by_text(text).first.is_visible():
